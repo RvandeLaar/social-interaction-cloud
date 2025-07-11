@@ -45,7 +45,33 @@ class NaoqiMoveTowardRequest(NaoqiMoveRequest):
     theta - normalized, unitless, velocity around Z-axis. +1 and -1 correspond to the maximum velocity in the counterclockwise and clockwise directions, respectively.
     """
 
-    pass
+    def __init__(self, x=0.0, y=0.0, theta=0.0):
+        super(NaoqiMoveTowardRequest, self).__init__(x, y, theta)
+
+    def _execute(self, session):
+        session.service("ALMotion").moveToward(
+            self.x, self.y, self.theta
+        )
+
+
+class NaoqiGetRobotVelocityRequest(SICRequest):
+    """Return (vx [m/s], vy [m/s], vth [rad/s]) in the world frame."""
+    def _execute(self, session):
+        return session.service("ALMotion").getRobotVelocity()
+
+
+class NaoqiCollisionProtectionRequest(SICRequest):
+    """
+    Enable / disable Pepper's external-collision protection.
+    target in {"Move","Arms","All","LArm","RArm"}
+    """
+    def __init__(self, target="All", enable=True):
+        super(NaoqiCollisionProtectionRequest, self).__init__()
+        self.target, self.enable = target, enable
+
+    def _execute(self, session):
+        session.service("ALMotion")\
+               .setExternalCollisionProtectionEnabled(self.target, self.enable)
 
 
 class NaoqiIdlePostureRequest(SICRequest):
@@ -171,6 +197,43 @@ class PepperPostureRequest(SICRequest):
         self.speed = speed
 
 
+class NaoqiGetAnglesRequest(SICRequest):
+    """
+    Request the current angles of specified joints from the robot.
+
+    Args:
+        names (list of str): List of joint names to query (e.g., ["LShoulderPitch", "RShoulderRoll"]).
+        use_sensors (bool): If True, return the actual sensor values; if False, return the commanded values.
+
+    Returns:
+        list of float: The angles (in radians) for the specified joints, in the same order as 'names'.
+    """
+    def __init__(self, names, use_sensors=True):
+        super(NaoqiGetAnglesRequest, self).__init__()
+        self.names = names
+        self.use_sensors = use_sensors
+
+    def _execute(self, session):
+        return session.service("ALMotion").getAngles(self.names, self.use_sensors)
+
+
+class NaoqiVelocityResponse(SICMessage):
+    """Response message containing robot velocity."""
+    def __init__(self, x, y, theta):
+        super(NaoqiVelocityResponse, self).__init__()
+        self.x = x
+        self.y = y
+        self.theta = theta
+
+
+class NaoqiAnglesResponse(SICMessage):
+    """Response message containing joint angles."""
+    def __init__(self, names, angles):
+        super(NaoqiAnglesResponse, self).__init__()
+        self.names = names
+        self.angles = angles
+
+
 class NaoqiMotionActuator(SICActuator):
     def __init__(self, *args, **kwargs):
         SICActuator.__init__(self, *args, **kwargs)
@@ -182,6 +245,14 @@ class NaoqiMotionActuator(SICActuator):
         self.posture = self.session.service("ALRobotPosture")
         self.animation = self.session.service("ALAnimationPlayer")
 
+    def moveToward(self, motion):
+        cfg = getattr(motion, "move_config", None)
+
+        if cfg is not None:            # collision protection / custom options
+            self.motion.moveToward(motion.x, motion.y, motion.theta, cfg)
+        else:                          # simple 3-argument call
+            self.motion.moveToward(motion.x, motion.y, motion.theta)
+
     @staticmethod
     def get_inputs():
         return [
@@ -189,6 +260,9 @@ class NaoqiMotionActuator(SICActuator):
             NaoqiMoveRequest,
             NaoqiMoveToRequest,
             NaoqiMoveTowardRequest,
+            NaoqiGetRobotVelocityRequest,
+            NaoqiCollisionProtectionRequest,
+            NaoqiGetAnglesRequest,
         ]
 
     @staticmethod
@@ -196,25 +270,36 @@ class NaoqiMotionActuator(SICActuator):
         return SICMessage
 
     def execute(self, request):
-        if request == NaoPostureRequest or request == PepperPostureRequest:
+        # locomotion
+        if isinstance(request, NaoqiMoveTowardRequest):
+            self.moveToward(request)
+        elif isinstance(request, NaoqiMoveToRequest):
+            self.moveTo(request)
+        elif isinstance(request, NaoqiMoveRequest):
+            self.move(request)
+
+        # posture & animation
+        elif isinstance(request, (NaoPostureRequest, PepperPostureRequest)):
             self.goToPosture(request)
-        if request == NaoqiAnimationRequest:
+        elif isinstance(request, NaoqiAnimationRequest):
             self.run_animation(request)
-        elif request == NaoqiIdlePostureRequest:
+
+        # misc
+        elif isinstance(request, NaoqiIdlePostureRequest):
             self.motion.setIdlePostureEnabled(request.joints, request.value)
-        elif request == NaoqiBreathingRequest:
+        elif isinstance(request, NaoqiBreathingRequest):
             self.motion.setBreathEnabled(request.joints, request.value)
-        elif request == NaoqiSmartStiffnessRequest:
+        elif isinstance(request, NaoqiSmartStiffnessRequest):
             self.motion.setSmartStiffnessEnabled(request.enable)
-            # sometimes it doesn't work in the first try, so doueble check
+            # sometimes it doesn't work in the first try, so double check
             if self.motion.getSmartStiffnessEnabled() != request.enable:
                 self.motion.setSmartStiffnessEnabled(request.enable)
-        elif request == NaoqiMoveRequest:
-            self.move(request)
-        elif request == NaoqiMoveToRequest:
-            self.moveTo(request)
-        elif request == NaoqiMoveTowardRequest:
-            self.moveToward(request)
+        elif isinstance(request, NaoqiGetRobotVelocityRequest):
+            return self.getRobotVelocity()
+        elif isinstance(request, NaoqiCollisionProtectionRequest):
+            self.setCollisionProtection(request)
+        elif isinstance(request, NaoqiGetAnglesRequest):
+            return self.get_angles(request.names, request.use_sensors)
 
         return SICMessage()
 
@@ -230,8 +315,22 @@ class NaoqiMotionActuator(SICActuator):
     def moveTo(self, motion):
         self.motion.moveTo(motion.x, motion.y, motion.theta)
 
-    def moveToward(self, motion):
-        self.motion.moveToward(motion.x, motion.y, motion.theta)
+    def getRobotVelocity(self):
+        """Get robot velocity and return as a message with x, y, theta attributes."""
+        velocity = self.motion.getRobotVelocity()
+        # Create a message with the velocity values
+        msg = NaoqiVelocityResponse(velocity[0], velocity[1], velocity[2])
+        return msg
+
+    def get_angles(self, names, use_sensors=True):
+        angles = self.motion.getAngles(names, use_sensors)
+        # Create a message with the angles
+        msg = NaoqiAnglesResponse(names, angles)
+        return msg
+
+    def setCollisionProtection(self, request):
+        """Set collision protection for the specified target."""
+        self.motion.setExternalCollisionProtectionEnabled(request.target, request.enable)
 
 
 class NaoqiMotion(SICConnector):

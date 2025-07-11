@@ -140,6 +140,7 @@ class NaoqiAutonomousActuator(SICActuator):
             NaoSpeakingMovementRequest,
             NaoWakeUpRequest,
             NaoRestRequest,
+            NaoSetAutonomousLifeRequest,
         ]
 
     @staticmethod

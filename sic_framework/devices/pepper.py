@@ -23,6 +23,18 @@ from sic_framework.devices.common_naoqi.pepper_top_tactile_sensor import (
     PepperTopTactile,
     PepperTopTactileSensor,
 )
+from sic_framework.devices.common_naoqi.pepper_back_bumper_sensor import (
+    PepperBackBumper,
+    PepperBackBumperSensor,
+)
+from sic_framework.devices.common_naoqi.pepper_right_bumper_sensor import (
+    PepperRightBumper,
+    PepperRightBumperSensor,
+)
+from sic_framework.devices.common_naoqi.pepper_left_bumper_sensor import (
+    PepperLeftBumper,
+    PepperLeftBumperSensor,
+)
 from sic_framework.devices.device import SICLibrary
 from sic_framework.devices.naoqi_shared import *
 
@@ -335,6 +347,18 @@ class Pepper(Naoqi):
     def tactile_sensor(self):
         return self._get_connector(PepperTopTactile)
 
+    @property
+    def back_bumper(self):
+        return self._get_connector(PepperBackBumper)
+
+    @property
+    def right_bumper(self):
+        return self._get_connector(PepperRightBumper)
+
+    @property
+    def left_bumper(self):
+        return self._get_connector(PepperLeftBumper)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -352,6 +376,9 @@ if __name__ == "__main__":
         StereoPepperCameraSensor,
         PepperMotionStreamerService,
         PepperTopTactileSensor,
+        PepperBackBumperSensor,
+        PepperRightBumperSensor,
+        PepperLeftBumperSensor,
     ]
 
     SICComponentManager(pepper_components)
