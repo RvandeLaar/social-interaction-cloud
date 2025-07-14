@@ -217,6 +217,25 @@ class NaoqiGetAnglesRequest(SICRequest):
         return session.service("ALMotion").getAngles(self.names, self.use_sensors)
 
 
+class NaoqiSetAnglesRequest(SICRequest):
+    """
+    Set the angles of specified joints on the robot.
+
+    Args:
+        names (list of str): List of joint names to set (e.g., ["LShoulderPitch", "RShoulderRoll"]).
+        angles (list of float): List of target angles (in radians) for the specified joints, in the same order as 'names'.
+        speed (float): Fraction of maximum speed to use (0.0 to 1.0). Default is 0.5.
+    """
+    def __init__(self, names, angles, speed=0.5):
+        super(NaoqiSetAnglesRequest, self).__init__()
+        self.names = names
+        self.angles = angles
+        self.speed = speed
+
+    def _execute(self, session):
+        return session.service("ALMotion").setAngles(self.names, self.angles, self.speed)
+
+
 class NaoqiVelocityResponse(SICMessage):
     """Response message containing robot velocity."""
     def __init__(self, x, y, theta):
@@ -232,6 +251,15 @@ class NaoqiAnglesResponse(SICMessage):
         super(NaoqiAnglesResponse, self).__init__()
         self.names = names
         self.angles = angles
+
+
+class NaoqiSetAnglesResponse(SICMessage):
+    """Response message confirming joint angles were set."""
+    def __init__(self, names, angles, speed):
+        super(NaoqiSetAnglesResponse, self).__init__()
+        self.names = names
+        self.angles = angles
+        self.speed = speed
 
 
 class NaoqiMotionActuator(SICActuator):
@@ -263,6 +291,7 @@ class NaoqiMotionActuator(SICActuator):
             NaoqiGetRobotVelocityRequest,
             NaoqiCollisionProtectionRequest,
             NaoqiGetAnglesRequest,
+            NaoqiSetAnglesRequest,
         ]
 
     @staticmethod
@@ -300,6 +329,8 @@ class NaoqiMotionActuator(SICActuator):
             self.setCollisionProtection(request)
         elif isinstance(request, NaoqiGetAnglesRequest):
             return self.get_angles(request.names, request.use_sensors)
+        elif isinstance(request, NaoqiSetAnglesRequest):
+            return self.set_angles(request.names, request.angles, request.speed)
 
         return SICMessage()
 
@@ -326,6 +357,13 @@ class NaoqiMotionActuator(SICActuator):
         angles = self.motion.getAngles(names, use_sensors)
         # Create a message with the angles
         msg = NaoqiAnglesResponse(names, angles)
+        return msg
+
+    def set_angles(self, names, angles, speed=0.5):
+        """Set joint angles and return a confirmation message."""
+        self.motion.setAngles(names, angles, speed)
+        # Create a response message with the set angles, following the same pattern as get_angles
+        msg = NaoqiSetAnglesResponse(names, angles, speed)
         return msg
 
     def setCollisionProtection(self, request):

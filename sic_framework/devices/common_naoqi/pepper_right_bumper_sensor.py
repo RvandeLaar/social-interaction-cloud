@@ -45,7 +45,7 @@ class PepperRightBumperSensor(SICComponent):
     def start(self):
         super(PepperRightBumperSensor, self).start()
 
-        self.bumper = self.memory_service.subscriber("Bumper/FrontRight_sensor")
+        self.bumper = self.memory_service.subscriber("RightBumperPressed")
         id = self.bumper.signal.connect(self.onBumperChanged)
         self.ids.append(id)
 
