@@ -74,6 +74,25 @@ class NaoqiCollisionProtectionRequest(SICRequest):
                .setExternalCollisionProtectionEnabled(self.target, self.enable)
 
 
+class NaoqiMoveArmsEnabledRequest(SICRequest):
+    """
+    Tell NAOqi's walking controller to (not) move the arms.
+    On NAOqi >= 2.4 the method is setMoveArmsEnabled; on older firmware it is
+    setWalkArmsEnabled, so we try both.
+    """
+    def __init__(self, left_enable=False, right_enable=False):
+        super(NaoqiMoveArmsEnabledRequest, self).__init__()
+        self.left_enable, self.right_enable = left_enable, right_enable
+
+    def _execute(self, session):
+        try:  # NAOqi >= 2.4
+            session.service("ALMotion")\
+                   .setMoveArmsEnabled(self.left_enable, self.right_enable)
+        except RuntimeError:  # NAOqi 2.3 / 2.1
+            session.service("ALMotion")\
+                   .setWalkArmsEnabled(self.left_enable, self.right_enable)
+
+
 class NaoqiIdlePostureRequest(SICRequest):
     def __init__(self, joints, value):
         """
@@ -292,6 +311,7 @@ class NaoqiMotionActuator(SICActuator):
             NaoqiCollisionProtectionRequest,
             NaoqiGetAnglesRequest,
             NaoqiSetAnglesRequest,
+            NaoqiMoveArmsEnabledRequest,
         ]
 
     @staticmethod
@@ -327,6 +347,8 @@ class NaoqiMotionActuator(SICActuator):
             return self.getRobotVelocity()
         elif isinstance(request, NaoqiCollisionProtectionRequest):
             self.setCollisionProtection(request)
+        elif isinstance(request, NaoqiMoveArmsEnabledRequest):
+            self.setMoveArmsEnabled(request)
         elif isinstance(request, NaoqiGetAnglesRequest):
             return self.get_angles(request.names, request.use_sensors)
         elif isinstance(request, NaoqiSetAnglesRequest):
@@ -369,6 +391,13 @@ class NaoqiMotionActuator(SICActuator):
     def setCollisionProtection(self, request):
         """Set collision protection for the specified target."""
         self.motion.setExternalCollisionProtectionEnabled(request.target, request.enable)
+
+    def setMoveArmsEnabled(self, request):
+        """Set whether the walking controller should move the arms."""
+        try:  # NAOqi >= 2.4
+            self.motion.setMoveArmsEnabled(request.left_enable, request.right_enable)
+        except RuntimeError:  # NAOqi 2.3 / 2.1
+            self.motion.setWalkArmsEnabled(request.left_enable, request.right_enable)
 
 
 class NaoqiMotion(SICConnector):

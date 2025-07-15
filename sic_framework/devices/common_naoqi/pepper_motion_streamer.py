@@ -161,15 +161,30 @@ class PepperMotionStreamerService(SICComponent, NaoqiMotionTools):
             return SICMessage()
             
         if isinstance(request, SetLockedJointsRequest):
-            self.locked_joints = list(request.locked_joints)
+            # Get the new list of locked joints
+            new_locked_joints = list(request.locked_joints)
+            
+            # Clear locked angles for joints that are no longer locked
+            new_locked_individual_joints = []
+            for chain in new_locked_joints:
+                if chain in self.chain_to_joints:
+                    new_locked_individual_joints.extend(self.chain_to_joints[chain])
+            
+            # Remove angles for joints that are no longer locked
+            for joint in list(self.locked_angles.keys()):
+                if joint not in new_locked_individual_joints:
+                    del self.locked_angles[joint]
+            
+            # Update locked joints list
+            self.locked_joints = new_locked_joints
+            
             # Set stiffness=1.0 for newly locked chains and store their current angles
             if self.locked_joints:
                 self.motion.setStiffnesses(self.locked_joints, 1.0)
                 # Store current angles for locked joints
-                locked_individual_joints = self._get_joints_in_locked_chains()
-                if locked_individual_joints:
-                    current_angles = self.motion.getAngles(locked_individual_joints, self.params.use_sensors)
-                    self.locked_angles.update(dict(zip(locked_individual_joints, current_angles)))
+                if new_locked_individual_joints:
+                    current_angles = self.motion.getAngles(new_locked_individual_joints, self.params.use_sensors)
+                    self.locked_angles.update(dict(zip(new_locked_individual_joints, current_angles)))
             return SICMessage()
             
         if isinstance(request, GetLockedJointsRequest):
